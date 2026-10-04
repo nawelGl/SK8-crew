@@ -1,5 +1,5 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_CLE } from "./config.js";
+import { SUPABASE_URL, SUPABASE_CLE, VAPID_CLE_PUBLIQUE } from "./config.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_CLE);
 const $ = (id) => document.getElementById(id);
@@ -11,6 +11,8 @@ const CLES = {
   prenom: "skate.prenom",
   participations: "skate.participations", // { sessionId: { id, jeton } }
   creations: "skate.creations",           // { sessionId: jeton }
+  abonnement: "skate.abonnement",         // id de l'abonnement push de ce téléphone
+  encartMasque: "skate.encartMasque",     // dernier encart que la personne a fermé
 };
 const stock = {
   lire(cle, defaut) {
@@ -427,6 +429,7 @@ async function publier() {
 
   const { data, error } = await supabase.rpc("creer_session", {
     p_date: date, p_heure: heure, p_spot: spotChoisi.id, p_propose_par: pseudo,
+    p_abonnement: stock.lire(CLES.abonnement, null), // pour ne pas se notifier soi-même
   });
   if (error) {
     console.error(error);
@@ -486,8 +489,132 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
     chargerSessions();
     chargerSpots();
+    majNotifs(); // la personne a pu changer l'autorisation dans les réglages
   }
 });
+
+/* =========================================================
+   Notifications push
+   ========================================================= */
+const ua = navigator.userAgent;
+const estIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const dansInstagram = /Instagram|FBAN|FBAV/i.test(ua);
+const estInstallee = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushDispo = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window
+  && !VAPID_CLE_PUBLIQUE.startsWith("TA_");
+
+const ENCARTS = {
+  instagram: {
+    titre: "Ouvre le lien dans ton navigateur",
+    detail: "Menu ⋯ en haut à droite, puis « Ouvrir dans le navigateur ». Tu pourras y installer l'appli et activer les notifs.",
+  },
+  "installer-ios": {
+    titre: "Installe l'appli pour les notifs",
+    detail: "Dans Safari : bouton Partager, puis « Sur l'écran d'accueil ». Ouvre ensuite l'appli depuis son icône.",
+  },
+  "a-activer": {
+    titre: "Ne rate aucune session",
+    detail: "Reçois une notif dès qu'une session est proposée.",
+    bouton: true,
+  },
+  bloquees: {
+    titre: "Notifs bloquées",
+    detail: "Réactive-les dans les réglages du téléphone pour être prévenu des nouvelles sessions.",
+  },
+};
+
+// Convertit la clé VAPID (texte base64url) dans le format attendu par le navigateur
+function cleVersOctets(base64url) {
+  const base64 = (base64url + "=".repeat((4 - (base64url.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+}
+
+async function abonnementActuel() {
+  if (!pushDispo) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+async function etatNotifs() {
+  if (dansInstagram) return "instagram";
+  if (estIOS && !estInstallee) return "installer-ios";
+  if (!pushDispo) return "indisponible";
+  if (Notification.permission === "denied") return "bloquees";
+  const sub = await abonnementActuel();
+  return sub && Notification.permission === "granted" ? "actives" : "a-activer";
+}
+
+async function majNotifs() {
+  const etat = await etatNotifs();
+  const encart = ENCARTS[etat];
+  const masque = stock.lire(CLES.encartMasque, null) === etat;
+
+  $("encart-notifs").hidden = !encart || masque;
+  if (encart) {
+    $("encart-titre").textContent = encart.titre;
+    $("encart-detail").textContent = encart.detail;
+    $("btn-notifs").hidden = !encart.bouton;
+  }
+  $("ligne-notifs").hidden = etat !== "actives";
+}
+
+// Envoie l'abonnement à Supabase et retient son id
+async function enregistrerAbonnement(sub) {
+  const { endpoint, keys } = sub.toJSON();
+  const { data, error } = await supabase.rpc("enregistrer_abonnement", {
+    p_endpoint: endpoint, p_p256dh: keys.p256dh, p_auth: keys.auth,
+  });
+  if (error) throw error;
+  stock.ecrire(CLES.abonnement, data);
+}
+
+async function activerNotifs() {
+  // La demande d'autorisation doit suivre un clic : c'est le cas ici
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return majNotifs();
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription())
+      || (await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: cleVersOctets(VAPID_CLE_PUBLIQUE),
+      }));
+    await enregistrerAbonnement(sub);
+    toast("Notifs activées. Tu seras prévenu des nouvelles sessions.");
+  } catch (erreur) {
+    console.error(erreur);
+    toast("Impossible d'activer les notifs pour l'instant.");
+  }
+  await majNotifs();
+}
+
+async function desactiverNotifs() {
+  const sub = await abonnementActuel();
+  if (sub) {
+    await supabase.rpc("supprimer_abonnement", { p_endpoint: sub.endpoint });
+    await sub.unsubscribe();
+  }
+  stock.ecrire(CLES.abonnement, null);
+  toast("Notifs désactivées.");
+  await majNotifs();
+}
+
+// Au lancement : on renvoie l'abonnement existant à Supabase,
+// au cas où il aurait changé ou été nettoyé entre-temps
+async function synchroniserAbonnement() {
+  if (!pushDispo || Notification.permission !== "granted") return;
+  const sub = await abonnementActuel();
+  if (sub) await enregistrerAbonnement(sub).catch(console.error);
+}
+
+async function demarrerNotifs() {
+  if ("serviceWorker" in navigator) {
+    await navigator.serviceWorker.register("sw.js").catch(console.error);
+  }
+  await majNotifs();
+  synchroniserAbonnement();
+}
 
 /* =========================================================
    Branchements
@@ -522,6 +649,13 @@ $("ns-annuler").addEventListener("click", () => {
 });
 $("ns-ajouter").addEventListener("click", (e) => pendant(e.currentTarget, ajouterSpot));
 
+$("btn-notifs").addEventListener("click", (e) => pendant(e.currentTarget, activerNotifs));
+$("btn-desactiver").addEventListener("click", (e) => pendant(e.currentTarget, desactiverNotifs));
+$("btn-encart-fermer").addEventListener("click", async () => {
+  stock.ecrire(CLES.encartMasque, await etatNotifs());
+  $("encart-notifs").hidden = true;
+});
+
 /* =========================================================
    Démarrage
    ========================================================= */
@@ -529,3 +663,4 @@ afficherPrenom();
 afficherVue();
 chargerSpots();
 chargerSessions();
+demarrerNotifs();

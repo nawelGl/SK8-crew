@@ -1,16 +1,27 @@
 <!doctype html>
 <html lang="fr">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#F1EFEA">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Skate">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Sessions skate</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icones/icone-192.png">
+  <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Public+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
 </head>
+
 <body>
   <div class="app">
 
@@ -18,9 +29,13 @@
     <section id="vue-liste" class="vue">
       <header class="entete">
         <div class="entete-haut">
-          <span class="marque">SK8 crew</span>
+          <span class="marque">Le crew skate</span>
           <button type="button" id="btn-prenom" class="puce">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+            </svg>
             <span id="prenom-affiche">Ton prénom</span>
           </button>
         </div>
@@ -29,6 +44,20 @@
       </header>
 
       <main class="contenu">
+        <aside id="encart-notifs" class="encart" aria-labelledby="encart-titre" hidden>
+          <div class="encart-texte">
+            <p id="encart-titre" class="encart-titre"></p>
+            <p id="encart-detail" class="aide"></p>
+            <button type="button" id="btn-notifs" class="bouton-sombre bouton-encart" hidden>Activer les notifs</button>
+          </div>
+          <button type="button" id="btn-encart-fermer" class="bouton-icone" aria-label="Masquer ce message">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </aside>
+
         <p id="etat-chargement" class="note">Chargement des sessions…</p>
         <div id="liste-sessions" class="liste"></div>
         <div id="liste-vide" class="vide" hidden>
@@ -36,11 +65,18 @@
           <p class="aide">Lance la prochaine, les autres pourront te rejoindre.</p>
         </div>
         <p class="note">Les sessions passées disparaissent automatiquement.</p>
+        <p id="ligne-notifs" class="note" hidden>
+          Notifs activées sur ce téléphone.
+          <button type="button" id="btn-desactiver" class="bouton-discret">Désactiver</button>
+        </p>
       </main>
 
       <div class="barre-bas">
         <button type="button" id="btn-proposer" class="bouton-principal">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
           Proposer une session
         </button>
       </div>
@@ -50,7 +86,10 @@
     <section id="vue-formulaire" class="vue" hidden>
       <header class="entete-form">
         <button type="button" id="btn-retour" class="bouton-icone" aria-label="Retour aux sessions">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
         </button>
         <h1 class="titre-form">Nouvelle session</h1>
       </header>
@@ -70,9 +109,13 @@
         <div class="champ champ-spot">
           <label for="f-spot">Spot</label>
           <div class="champ-icone">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
-            <input id="f-spot" type="text" autocomplete="off" placeholder="Commence à taper un spot…"
-                   role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" />
+              <circle cx="12" cy="9.5" r="2.5" />
+            </svg>
+            <input id="f-spot" type="text" autocomplete="off" placeholder="Commence à taper un spot…" role="combobox"
+              aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions">
           </div>
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Spots" hidden></div>
           <p id="spot-choisi" class="aide aide-ok" hidden></p>
@@ -130,4 +173,5 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
+
 </html>
