@@ -1,0 +1,531 @@
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+import { SUPABASE_URL, SUPABASE_CLE } from "./config.js";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_CLE);
+const $ = (id) => document.getElementById(id);
+
+/* =========================================================
+   Stockage local (prénom + jetons secrets)
+   ========================================================= */
+const CLES = {
+  prenom: "skate.prenom",
+  participations: "skate.participations", // { sessionId: { id, jeton } }
+  creations: "skate.creations",           // { sessionId: jeton }
+};
+const stock = {
+  lire(cle, defaut) {
+    try {
+      const v = localStorage.getItem(cle);
+      return v === null ? defaut : JSON.parse(v);
+    } catch {
+      return defaut;
+    }
+  },
+  ecrire(cle, valeur) {
+    try {
+      localStorage.setItem(cle, JSON.stringify(valeur));
+    } catch {
+      /* navigation privée ou stockage plein : on continue sans */
+    }
+  },
+};
+
+let prenom = stock.lire(CLES.prenom, "");
+let participations = stock.lire(CLES.participations, {});
+let creations = stock.lire(CLES.creations, {});
+let sessions = [];
+let spots = [];
+let spotChoisi = null;
+
+function sauverJetons() {
+  stock.ecrire(CLES.participations, participations);
+  stock.ecrire(CLES.creations, creations);
+}
+
+/* =========================================================
+   Utilitaires
+   ========================================================= */
+function aujourdhui() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dateLocale(iso) {
+  const [a, m, j] = iso.split("-").map(Number);
+  return new Date(a, m - 1, j);
+}
+const fmtJour = new Intl.DateTimeFormat("fr-FR", { weekday: "short" });
+const fmtMois = new Intl.DateTimeFormat("fr-FR", { month: "short" });
+const fmtLong = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+const sansPoint = (t) => t.replace(".", "");
+const formatHeure = (h) => h.slice(0, 5).replace(":", "h");
+const normaliser = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+// Crée un élément en mettant le texte via textContent (protège des injections HTML)
+function el(tag, props = {}, ...enfants) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, "");
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const c of enfants.flat()) {
+    if (c == null || c === false) continue;
+    e.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return e;
+}
+
+const ICONES = {
+  horloge: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
+  plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+};
+function icone(nom) {
+  const s = document.createElement("span");
+  s.className = "ico";
+  s.setAttribute("aria-hidden", "true");
+  s.innerHTML = ICONES[nom]; // contenu fixe, pas de donnée utilisateur
+  return s;
+}
+
+let minuteurToast;
+function toast(message) {
+  const t = $("toast");
+  t.textContent = message;
+  t.hidden = false;
+  clearTimeout(minuteurToast);
+  minuteurToast = setTimeout(() => (t.hidden = true), 3500);
+}
+
+// Désactive un bouton pendant une action réseau
+async function pendant(bouton, action) {
+  if (bouton.disabled) return;
+  bouton.disabled = true;
+  try {
+    await action();
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
+/* =========================================================
+   Prénom
+   ========================================================= */
+function afficherPrenom() {
+  $("prenom-affiche").textContent = prenom ? `${prenom} · changer` : "Ton prénom";
+}
+
+function demanderPrenom() {
+  return new Promise((resolve) => {
+    const dialogue = $("dialog-prenom");
+    const form = $("form-prenom");
+    const champ = $("d-prenom");
+    const annuler = $("d-annuler");
+    champ.value = prenom;
+
+    const terminer = (valeur) => {
+      form.removeEventListener("submit", valider);
+      annuler.removeEventListener("click", fermer);
+      dialogue.removeEventListener("cancel", fermer);
+      dialogue.close();
+      resolve(valeur);
+    };
+    const valider = (e) => {
+      e.preventDefault();
+      const v = champ.value.trim();
+      if (!v) return champ.focus();
+      prenom = v;
+      stock.ecrire(CLES.prenom, v);
+      afficherPrenom();
+      terminer(v);
+    };
+    const fermer = (e) => {
+      e.preventDefault();
+      terminer(null);
+    };
+
+    form.addEventListener("submit", valider);
+    annuler.addEventListener("click", fermer);
+    dialogue.addEventListener("cancel", fermer);
+    dialogue.showModal();
+    champ.focus();
+  });
+}
+
+async function assurerPrenom() {
+  return prenom || (await demanderPrenom());
+}
+
+/* =========================================================
+   Sessions
+   ========================================================= */
+async function chargerSessions() {
+  const { data, error } = await supabase
+    .from("sessions")
+    .select("id, date, heure, propose_par, spot:spots(nom, adresse), participants(id, prenom, created_at)")
+    .gte("date", aujourdhui())
+    .order("date")
+    .order("heure");
+
+  $("etat-chargement").hidden = true;
+  if (error) {
+    console.error(error);
+    toast("Impossible de charger les sessions. Vérifie ta connexion.");
+    return;
+  }
+  sessions = data;
+  nettoyerJetons();
+  afficherSessions();
+}
+
+// Oublie les jetons des sessions passées ou des participations supprimées
+function nettoyerJetons() {
+  const ids = new Set(sessions.map((s) => s.id));
+  for (const [sid, part] of Object.entries(participations)) {
+    const s = sessions.find((x) => x.id === sid);
+    if (!s || !s.participants.some((p) => p.id === part.id)) delete participations[sid];
+  }
+  for (const sid of Object.keys(creations)) {
+    if (!ids.has(sid)) delete creations[sid];
+  }
+  sauverJetons();
+}
+
+function afficherSessions() {
+  const liste = $("liste-sessions");
+  liste.replaceChildren(...sessions.map(carteSession));
+  $("liste-vide").hidden = sessions.length > 0;
+}
+
+function carteSession(s) {
+  const d = dateLocale(s.date);
+  const maPart = participations[s.id];
+  const jeVais = Boolean(maPart);
+  const estAujourdhui = s.date === aujourdhui();
+
+  const gens = [...s.participants]
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((p) => ({ nom: maPart && p.id === maPart.id ? "Toi" : p.prenom, moi: maPart && p.id === maPart.id }));
+  const n = gens.length;
+  const compte = n === 0
+    ? "Personne pour l'instant"
+    : `${n} dispo · ${gens.map((g) => g.nom).join(", ")}`;
+
+  const spotNom = s.spot?.nom ?? "Spot supprimé";
+  const meta = [estAujourdhui ? "Aujourd'hui" : null, formatHeure(s.heure), s.spot?.adresse || null]
+    .filter(Boolean)
+    .join(" · ");
+
+  const bouton = jeVais
+    ? el("button", { type: "button", class: "bouton-rejoindre actif", "aria-pressed": "true",
+        onclick: (e) => pendant(e.currentTarget, () => quitter(s)) },
+        icone("check"), "J'y vais")
+    : el("button", { type: "button", class: "bouton-rejoindre", "aria-pressed": "false",
+        onclick: (e) => pendant(e.currentTarget, () => rejoindre(s)) },
+        "Je viens");
+
+  return el("article", { class: "carte" },
+    el("div", { class: "carte-haut" },
+      el("div", { class: estAujourdhui ? "bloc-date aujourdhui" : "bloc-date", "aria-hidden": "true" },
+        el("span", { class: "bloc-date-petit" }, sansPoint(fmtJour.format(d))),
+        el("span", { class: "bloc-date-num" }, d.getDate()),
+        el("span", { class: "bloc-date-petit" }, sansPoint(fmtMois.format(d))),
+      ),
+      el("div", { class: "infos" },
+        el("span", { class: "sr" }, fmtLong.format(d)),
+        el("h2", { class: "spot" }, spotNom),
+        el("span", { class: "meta" }, icone("horloge"), meta),
+        el("span", { class: "auteur" }, `Proposée par ${s.propose_par}`),
+      ),
+    ),
+    el("div", { class: "carte-bas" },
+      el("div", { class: "participants" },
+        n > 0 && el("div", { class: "avatars", "aria-hidden": "true" },
+          gens.slice(0, 5).map((g) =>
+            el("span", { class: g.moi ? "avatar moi" : "avatar" }, g.moi ? "Toi" : g.nom.charAt(0).toUpperCase()))),
+        el("span", { class: "compte" }, compte),
+      ),
+      bouton,
+    ),
+    creations[s.id] && el("button", { type: "button", class: "bouton-lien",
+      onclick: (e) => pendant(e.currentTarget, () => supprimerSession(s)) },
+      "Supprimer ma session"),
+  );
+}
+
+async function rejoindre(s) {
+  const p = await assurerPrenom();
+  if (!p) return;
+  const { data, error } = await supabase.rpc("rejoindre_session", { p_session: s.id, p_prenom: p });
+  if (error) {
+    console.error(error);
+    toast("Impossible de rejoindre cette session.");
+    return;
+  }
+  const r = data[0];
+  participations[s.id] = { id: r.nouvel_id, jeton: r.nouveau_jeton };
+  sauverJetons();
+  await chargerSessions();
+}
+
+async function quitter(s) {
+  const part = participations[s.id];
+  const { data, error } = await supabase.rpc("quitter_session", { p_id: part.id, p_jeton: part.jeton });
+  if (error || data === false) {
+    console.error(error);
+    toast("Impossible de te retirer de cette session.");
+    return;
+  }
+  delete participations[s.id];
+  sauverJetons();
+  await chargerSessions();
+}
+
+async function supprimerSession(s) {
+  if (!confirm("Supprimer cette session pour tout le monde ?")) return;
+  const { data, error } = await supabase.rpc("supprimer_session", { p_id: s.id, p_jeton: creations[s.id] });
+  if (error || data === false) {
+    console.error(error);
+    toast("Impossible de supprimer cette session.");
+    return;
+  }
+  delete creations[s.id];
+  delete participations[s.id];
+  sauverJetons();
+  toast("Session supprimée.");
+  await chargerSessions();
+}
+
+/* =========================================================
+   Spots et autocomplétion
+   ========================================================= */
+async function chargerSpots() {
+  const { data, error } = await supabase.from("spots").select("id, nom, adresse").order("nom");
+  if (error) return console.error(error);
+  spots = data;
+}
+
+function fermerSuggestions() {
+  $("suggestions").hidden = true;
+  $("f-spot").setAttribute("aria-expanded", "false");
+}
+
+function majSuggestions() {
+  const champ = $("f-spot");
+  const tape = champ.value.trim();
+  const q = normaliser(tape);
+  const resultats = q
+    ? spots.filter((sp) => normaliser(sp.nom).includes(q) || normaliser(sp.adresse).includes(q))
+    : spots;
+  const existeDeja = q && spots.some((sp) => normaliser(sp.nom) === q);
+
+  const boite = $("suggestions");
+  boite.replaceChildren(
+    ...resultats.slice(0, 6).map((sp) =>
+      el("button", { type: "button", class: "suggestion", role: "option", onclick: () => choisirSpot(sp) },
+        el("span", { class: "suggestion-nom" }, sp.nom),
+        sp.adresse && el("span", { class: "suggestion-adresse" }, sp.adresse),
+      )),
+  );
+  if (q && resultats.length === 0) {
+    boite.append(el("p", { class: "suggestion-vide" }, "Aucun spot connu ne correspond."));
+  }
+  if (!existeDeja) {
+    boite.append(el("button", { type: "button", class: "suggestion suggestion-ajout", onclick: ouvrirNouveauSpot },
+      icone("plus"),
+      tape ? `Ajouter « ${tape} » comme nouveau spot` : "Ajouter un nouveau spot"));
+  }
+  boite.hidden = false;
+  champ.setAttribute("aria-expanded", "true");
+}
+
+function choisirSpot(sp) {
+  spotChoisi = sp;
+  $("f-spot").value = sp.nom;
+  fermerSuggestions();
+  const info = $("spot-choisi");
+  info.replaceChildren(icone("check"), sp.adresse ? `Spot connu · ${sp.adresse}` : "Spot connu");
+  info.hidden = false;
+  $("erreur-form").hidden = true;
+}
+
+function ouvrirNouveauSpot() {
+  fermerSuggestions();
+  $("ns-nom").value = $("f-spot").value.trim();
+  $("ns-adresse").value = "";
+  $("nouveau-spot").hidden = false;
+  ($("ns-nom").value ? $("ns-adresse") : $("ns-nom")).focus();
+}
+
+async function ajouterSpot() {
+  const nom = $("ns-nom").value.trim();
+  const adresse = $("ns-adresse").value.trim();
+  if (!nom) return $("ns-nom").focus();
+
+  const { data, error } = await supabase.rpc("ajouter_spot", { p_nom: nom, p_adresse: adresse });
+  if (error) {
+    console.error(error);
+    toast("Impossible d'ajouter ce spot.");
+    return;
+  }
+  const sp = Array.isArray(data) ? data[0] : data;
+  const existait = spots.some((x) => x.id === sp.id);
+  if (!existait) {
+    spots.push(sp);
+    spots.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  }
+  $("nouveau-spot").hidden = true;
+  choisirSpot(sp);
+  toast(existait ? "Ce spot existait déjà, il est sélectionné." : "Spot ajouté.");
+}
+
+/* =========================================================
+   Formulaire de session
+   ========================================================= */
+function preparerFormulaire() {
+  const date = $("f-date");
+  date.min = aujourdhui();
+  if (!date.value) date.value = aujourdhui();
+  if (!$("f-pseudo").value) $("f-pseudo").value = prenom;
+}
+
+function reinitialiserFormulaire() {
+  $("form-session").reset();
+  spotChoisi = null;
+  $("spot-choisi").hidden = true;
+  $("nouveau-spot").hidden = true;
+  $("erreur-form").hidden = true;
+  fermerSuggestions();
+}
+
+function afficherErreur(message) {
+  const e = $("erreur-form");
+  e.textContent = message;
+  e.hidden = false;
+}
+
+async function publier() {
+  const date = $("f-date").value;
+  const heure = $("f-heure").value;
+  const pseudo = $("f-pseudo").value.trim();
+
+  // Si le nom tapé correspond exactement à un spot connu, on le prend
+  if (!spotChoisi) {
+    const q = normaliser($("f-spot").value);
+    spotChoisi = spots.find((sp) => normaliser(sp.nom) === q) || null;
+  }
+
+  const erreur =
+    !date ? "Choisis une date." :
+    date < aujourdhui() ? "Cette date est déjà passée." :
+    !heure ? "Choisis une heure." :
+    !spotChoisi ? "Choisis un spot dans la liste, ou ajoute-le comme nouveau spot." :
+    !pseudo ? "Indique ton prénom." :
+    null;
+  if (erreur) return afficherErreur(erreur);
+
+  const { data, error } = await supabase.rpc("creer_session", {
+    p_date: date, p_heure: heure, p_spot: spotChoisi.id, p_propose_par: pseudo,
+  });
+  if (error) {
+    console.error(error);
+    return afficherErreur("La session n'a pas pu être publiée. Réessaie dans un instant.");
+  }
+  const r = data[0];
+  creations[r.nouvel_id] = r.nouveau_jeton;
+
+  if (!prenom) {
+    prenom = pseudo;
+    stock.ecrire(CLES.prenom, pseudo);
+    afficherPrenom();
+  }
+
+  // Le créateur rejoint automatiquement sa session
+  const rej = await supabase.rpc("rejoindre_session", { p_session: r.nouvel_id, p_prenom: pseudo });
+  if (!rej.error) {
+    participations[r.nouvel_id] = { id: rej.data[0].nouvel_id, jeton: rej.data[0].nouveau_jeton };
+  }
+  sauverJetons();
+
+  reinitialiserFormulaire();
+  location.hash = "";
+  toast("Session publiée, le crew la voit déjà.");
+  await chargerSessions();
+}
+
+/* =========================================================
+   Navigation entre les deux vues
+   ========================================================= */
+function afficherVue() {
+  const formulaire = location.hash === "#proposer";
+  $("vue-liste").hidden = formulaire;
+  $("vue-formulaire").hidden = !formulaire;
+  window.scrollTo(0, 0);
+  if (formulaire) preparerFormulaire();
+}
+
+/* =========================================================
+   Temps réel
+   ========================================================= */
+let minuteurRechargement;
+function rechargerBientot() {
+  clearTimeout(minuteurRechargement);
+  minuteurRechargement = setTimeout(chargerSessions, 300);
+}
+
+supabase
+  .channel("crew")
+  .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, rechargerBientot)
+  .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, rechargerBientot)
+  .on("postgres_changes", { event: "*", schema: "public", table: "spots" }, chargerSpots)
+  .subscribe();
+
+// Sur mobile, la connexion temps réel peut se couper en arrière-plan : on recharge au retour
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    chargerSessions();
+    chargerSpots();
+  }
+});
+
+/* =========================================================
+   Branchements
+   ========================================================= */
+$("btn-prenom").addEventListener("click", demanderPrenom);
+$("btn-proposer").addEventListener("click", () => (location.hash = "proposer"));
+$("btn-retour").addEventListener("click", () => (location.hash = ""));
+window.addEventListener("hashchange", afficherVue);
+
+$("form-session").addEventListener("submit", (e) => {
+  e.preventDefault();
+  pendant($("btn-publier"), publier);
+});
+
+const champSpot = $("f-spot");
+champSpot.addEventListener("input", () => {
+  spotChoisi = null;
+  $("spot-choisi").hidden = true;
+  majSuggestions();
+});
+champSpot.addEventListener("focus", majSuggestions);
+champSpot.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") fermerSuggestions();
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".champ-spot")) fermerSuggestions();
+});
+
+$("ns-annuler").addEventListener("click", () => {
+  $("nouveau-spot").hidden = true;
+  champSpot.focus();
+});
+$("ns-ajouter").addEventListener("click", (e) => pendant(e.currentTarget, ajouterSpot));
+
+/* =========================================================
+   Démarrage
+   ========================================================= */
+afficherPrenom();
+afficherVue();
+chargerSpots();
+chargerSessions();
