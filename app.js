@@ -259,7 +259,10 @@ function carteSession(s) {
 async function rejoindre(s) {
   const p = await assurerPrenom();
   if (!p) return;
-  const { data, error } = await supabase.rpc("rejoindre_session", { p_session: s.id, p_prenom: p });
+  const { data, error } = await supabase.rpc("rejoindre_session", {
+    p_session: s.id, p_prenom: p,
+    p_abonnement: stock.lire(CLES.abonnement, null), // pour que le créateur soit prévenu
+  });
   if (error) {
     console.error(error);
     toast("Impossible de rejoindre cette session.");
@@ -445,7 +448,10 @@ async function publier() {
   }
 
   // Le créateur rejoint automatiquement sa session
-  const rej = await supabase.rpc("rejoindre_session", { p_session: r.nouvel_id, p_prenom: pseudo });
+  const rej = await supabase.rpc("rejoindre_session", {
+    p_session: r.nouvel_id, p_prenom: pseudo,
+    p_abonnement: stock.lire(CLES.abonnement, null),
+  });
   if (!rej.error) {
     participations[r.nouvel_id] = { id: rej.data[0].nouvel_id, jeton: rej.data[0].nouveau_jeton };
   }
@@ -519,7 +525,7 @@ const ENCARTS = {
   },
   bloquees: {
     titre: "Notifs bloquées",
-    detail: "Réactive-les dans les réglages du téléphone pour être prévenu des nouvelles sessions.",
+    detail: "Réactive-les dans les réglages de ton navigateur ou de ton téléphone pour être prévenu des nouvelles sessions.",
   },
 };
 
