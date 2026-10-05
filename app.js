@@ -82,6 +82,7 @@ const ICONES = {
   horloge: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
   plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  route: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-8a3.5 3.5 0 0 1 0-7H12"/></svg>',
   croix: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   crayon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
   repere: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
@@ -178,7 +179,7 @@ async function assurerPrenom() {
 async function chargerSessions() {
   const { data, error } = await supabase
     .from("sessions")
-    .select("id, date, heure, heure_fin, propose_par, spot:spots(id, nom, adresse), participants(id, prenom, statut, created_at)")
+    .select("id, date, heure, heure_fin, propose_par, balade, arrivee, description, spot:spots(id, nom, adresse, type), participants(id, prenom, statut, created_at)")
     .gte("date", aujourdhui())
     .is("annulee_le", null) // les sessions annulées restent en base mais ne s'affichent plus
     .order("date")
@@ -212,6 +213,11 @@ function afficherSessions() {
   const liste = $("liste-sessions");
   liste.replaceChildren(...sessions.map(carteSession));
   $("liste-vide").hidden = sessions.length > 0;
+
+  // « Voir plus » n'apparaît que si la description dépasse deux lignes
+  for (const desc of liste.querySelectorAll(".description-session")) {
+    desc.nextElementSibling.hidden = desc.scrollHeight <= desc.clientHeight + 1;
+  }
 }
 
 function carteSession(s) {
@@ -229,7 +235,8 @@ function carteSession(s) {
   const pasDispos = gens.filter((g) => g.statut === "pas_dispo");
   const maReponse = gens.find((g) => g.moi)?.statut ?? null; // "dispo", "pas_dispo" ou null
 
-  const spotNom = s.spot?.nom ?? "Spot supprimé";
+  const spotNom = s.spot?.nom ?? (s.balade ? "Départ supprimé" : "Spot supprimé");
+  const titre = s.balade && s.arrivee ? `${spotNom} → ${s.arrivee}` : spotNom;
   const plage = s.heure_fin ? `${formatHeure(s.heure)} – ${formatHeure(s.heure_fin)}` : formatHeure(s.heure);
   const meta = [estAujourdhui ? "Aujourd'hui" : null, plage]
     .filter(Boolean)
@@ -263,17 +270,29 @@ function carteSession(s) {
       ),
       el("div", { class: "infos" },
         el("span", { class: "sr" }, fmtLong.format(d)),
-        el("h2", { class: "spot" }, spotNom),
+        s.balade && el("span", { class: "badge-balade" }, icone("route"), "Balade"),
+        el("h2", { class: "spot" }, titre),
         el("span", { class: "meta" }, icone("horloge"), meta),
         s.spot && el("div", { class: "ligne-adresse" },
           el("a", {
             class: "lien-carte", href: lienCarte(s.spot), target: "_blank", rel: "noopener",
             "aria-label": `Ouvrir ${s.spot.nom} dans les cartes`,
-          }, icone("repere"), s.spot.adresse || "Voir sur la carte"),
+          }, icone("repere"),
+            s.balade ? `Départ : ${s.spot.adresse || s.spot.nom}` : (s.spot.adresse || "Voir sur la carte")),
         ),
         el("span", { class: "auteur" }, `Proposée par ${s.propose_par}`),
       ),
     ),
+    s.description && el("p", { class: "description-session" }, s.description),
+    s.description && el("button", {
+      type: "button", class: "voir-plus", "aria-expanded": "false",
+      onclick: (e) => {
+        const desc = e.currentTarget.previousElementSibling;
+        const ouverte = desc.classList.toggle("ouverte");
+        e.currentTarget.textContent = ouverte ? "Voir moins" : "Voir plus";
+        e.currentTarget.setAttribute("aria-expanded", String(ouverte));
+      },
+    }, "Voir plus"),
     el("div", { class: "reponses" },
       dispos.length === 0 && el("span", { class: "compte" }, "Personne de dispo pour l'instant"),
       groupe("Dispo", dispos, "dispo", "check"),
@@ -354,7 +373,7 @@ async function supprimerSession(s) {
    Spots et autocomplétion
    ========================================================= */
 async function chargerSpots() {
-  const { data, error } = await supabase.from("spots").select("id, nom, adresse").order("nom");
+  const { data, error } = await supabase.from("spots").select("id, nom, adresse, type").order("nom");
   if (error) return console.error(error);
   spots = data;
 }
@@ -364,14 +383,20 @@ function fermerSuggestions() {
   $("f-spot").setAttribute("aria-expanded", "false");
 }
 
+// Type de lieu attendu par le formulaire : départ pour une balade, spot sinon
+const typeLieu = () => ($("f-balade").checked ? "depart" : "spot");
+const lieuxDuType = () => spots.filter((sp) => (sp.type || "spot") === typeLieu());
+const motLieu = () => (typeLieu() === "depart" ? "départ" : "spot");
+
 function majSuggestions() {
   const champ = $("f-spot");
   const tape = champ.value.trim();
   const q = normaliser(tape);
+  const lieux = lieuxDuType();
   const resultats = q
-    ? spots.filter((sp) => normaliser(sp.nom).includes(q) || normaliser(sp.adresse).includes(q))
-    : spots;
-  const existeDeja = q && spots.some((sp) => normaliser(sp.nom) === q);
+    ? lieux.filter((sp) => normaliser(sp.nom).includes(q) || normaliser(sp.adresse).includes(q))
+    : lieux;
+  const existeDeja = q && lieux.some((sp) => normaliser(sp.nom) === q);
 
   const boite = $("suggestions");
   boite.replaceChildren(
@@ -385,12 +410,12 @@ function majSuggestions() {
       )),
   );
   if (q && resultats.length === 0) {
-    boite.append(el("p", { class: "suggestion-vide" }, "Aucun spot connu ne correspond."));
+    boite.append(el("p", { class: "suggestion-vide" }, `Aucun ${motLieu()} connu ne correspond.`));
   }
   if (!existeDeja) {
     boite.append(el("button", { type: "button", class: "suggestion suggestion-ajout", onclick: ouvrirNouveauSpot },
       icone("plus"),
-      tape ? `Ajouter « ${tape} » comme nouveau spot` : "Ajouter un nouveau spot"));
+      tape ? `Ajouter « ${tape} » comme nouveau ${motLieu()}` : `Ajouter un nouveau ${motLieu()}`));
   }
   boite.hidden = false;
   champ.setAttribute("aria-expanded", "true");
@@ -401,7 +426,8 @@ function choisirSpot(sp) {
   $("f-spot").value = sp.nom;
   fermerSuggestions();
   const info = $("spot-choisi");
-  info.replaceChildren(icone("check"), sp.adresse ? `Spot connu · ${sp.adresse}` : "Spot connu", boutonCorriger(sp));
+  const connu = sp.type === "depart" ? "Départ connu" : "Spot connu";
+  info.replaceChildren(icone("check"), sp.adresse ? `${connu} · ${sp.adresse}` : connu, boutonCorriger(sp));
   info.hidden = false;
   $("erreur-form").hidden = true;
 }
@@ -419,10 +445,10 @@ async function ajouterSpot() {
   const adresse = $("ns-adresse").value.trim();
   if (!nom) return $("ns-nom").focus();
 
-  const { data, error } = await supabase.rpc("ajouter_spot", { p_nom: nom, p_adresse: adresse });
+  const { data, error } = await supabase.rpc("ajouter_spot", { p_nom: nom, p_adresse: adresse, p_type: typeLieu() });
   if (error) {
     console.error(error);
-    toast("Impossible d'ajouter ce spot.");
+    toast(`Impossible d'ajouter ce ${motLieu()}.`);
     return;
   }
   const sp = Array.isArray(data) ? data[0] : data;
@@ -433,7 +459,7 @@ async function ajouterSpot() {
   }
   $("nouveau-spot").hidden = true;
   choisirSpot(sp);
-  toast(existait ? "Ce spot existait déjà, il est sélectionné." : "Spot ajouté.");
+  toast(existait ? `Ce ${motLieu()} existait déjà, il est sélectionné.` : (typeLieu() === "depart" ? "Départ ajouté." : "Spot ajouté."));
 }
 
 /* =========================================================
@@ -520,6 +546,34 @@ async function corrigerAdresse(spot) {
 /* =========================================================
    Formulaire de session
    ========================================================= */
+// Adapte le formulaire selon que la case « Balade » est cochée ou non
+function majModeBalade() {
+  const balade = $("f-balade").checked;
+  $("label-spot").textContent = balade ? "Départ" : "Spot";
+  $("f-spot").placeholder = balade ? "Commence à taper un lieu de départ…" : "Commence à taper un spot…";
+  $("suggestions").setAttribute("aria-label", balade ? "Départs de balade" : "Spots");
+  $("champ-arrivee").hidden = !balade;
+  $("ns-titre").textContent = balade ? "Nouveau départ" : "Nouveau spot";
+  $("ns-label-nom").textContent = balade ? "Nom du lieu de départ" : "Nom du spot";
+  $("ns-aide").textContent = balade
+    ? "Il sera proposé à tout le crew pour les prochaines balades."
+    : "Il sera proposé à tout le crew pour les prochaines sessions.";
+  $("ns-nom").placeholder = balade ? "Ex. Métro Bastille" : "Ex. Skatepark couvert";
+
+  // Le lieu choisi n'est plus du bon type : on le retire
+  if (spotChoisi && (spotChoisi.type || "spot") !== typeLieu()) {
+    spotChoisi = null;
+    $("f-spot").value = "";
+    $("spot-choisi").hidden = true;
+  }
+  $("nouveau-spot").hidden = true;
+  fermerSuggestions();
+}
+
+function majCompteur() {
+  $("compteur-description").textContent = `${$("f-description").value.length} / 280`;
+}
+
 // Session en cours de modification (null = on crée une nouvelle session)
 let sessionEnEdition = null;
 
@@ -541,6 +595,11 @@ function ouvrirModification(s) {
   $("f-date").value = s.date;
   $("f-heure").value = s.heure.slice(0, 5);
   $("f-heure-fin").value = s.heure_fin ? s.heure_fin.slice(0, 5) : "";
+  $("f-balade").checked = Boolean(s.balade);
+  majModeBalade();
+  $("f-arrivee").value = s.arrivee || "";
+  $("f-description").value = s.description || "";
+  majCompteur();
   const spot = s.spot && (spots.find((sp) => sp.id === s.spot.id) || s.spot);
   if (spot) choisirSpot(spot);
   location.hash = "modifier";
@@ -548,12 +607,13 @@ function ouvrirModification(s) {
 
 function reinitialiserFormulaire() {
   $("form-session").reset();
+  majCompteur();
   sessionEnEdition = null;
   spotChoisi = null;
   $("spot-choisi").hidden = true;
   $("nouveau-spot").hidden = true;
   $("erreur-form").hidden = true;
-  fermerSuggestions();
+  majModeBalade(); // la case Balade revient décochée
 }
 
 function afficherErreur(message) {
@@ -567,11 +627,14 @@ async function publier() {
   const heure = $("f-heure").value;
   const heureFin = $("f-heure-fin").value; // vide si non renseignée
   const pseudo = $("f-pseudo").value.trim();
+  const balade = $("f-balade").checked;
+  const arrivee = balade ? $("f-arrivee").value.trim() : "";
+  const description = $("f-description").value.trim();
 
-  // Si le nom tapé correspond exactement à un spot connu, on le prend
+  // Si le nom tapé correspond exactement à un lieu connu du bon type, on le prend
   if (!spotChoisi) {
     const q = normaliser($("f-spot").value);
-    spotChoisi = spots.find((sp) => normaliser(sp.nom) === q) || null;
+    spotChoisi = lieuxDuType().find((sp) => normaliser(sp.nom) === q) || null;
   }
 
   const erreur =
@@ -579,17 +642,19 @@ async function publier() {
     date < aujourdhui() ? "Cette date est déjà passée." :
     !heure ? "Choisis une heure de début." :
     heureFin && heureFin <= heure ? "L'heure de fin doit être après le début." :
-    !spotChoisi ? "Choisis un spot dans la liste, ou ajoute-le comme nouveau spot." :
+    !spotChoisi ? `Choisis un ${motLieu()} dans la liste, ou ajoute-le comme nouveau ${motLieu()}.` :
     !pseudo && !sessionEnEdition ? "Indique ton prénom." :
     null;
   if (erreur) return afficherErreur(erreur);
 
-  if (sessionEnEdition) return enregistrerModification(date, heure, heureFin);
+  const extras = { balade, arrivee, description };
+  if (sessionEnEdition) return enregistrerModification(date, heure, heureFin, extras);
 
   const { data, error } = await supabase.rpc("creer_session", {
     p_date: date, p_heure: heure, p_spot: spotChoisi.id, p_propose_par: pseudo,
     p_abonnement: stock.lire(CLES.abonnement, null), // pour ne pas se notifier soi-même
     p_heure_fin: heureFin || null,
+    p_balade: balade, p_arrivee: arrivee || null, p_description: description || null,
   });
   if (error) {
     console.error(error);
@@ -616,15 +681,17 @@ async function publier() {
 
   reinitialiserFormulaire();
   location.hash = "";
-  toast("Session publiée, le crew la voit déjà.");
+  toast(balade ? "Balade publiée, le crew la voit déjà." : "Session publiée, le crew la voit déjà.");
   await chargerSessions();
 }
 
-async function enregistrerModification(date, heure, heureFin) {
+async function enregistrerModification(date, heure, heureFin, { balade, arrivee, description }) {
   const s = sessionEnEdition;
   const { data, error } = await supabase.rpc("modifier_session", {
     p_id: s.id, p_jeton: creations[s.id],
     p_date: date, p_heure: heure, p_heure_fin: heureFin || null, p_spot: spotChoisi.id,
+    // Texte vide = effacer l'arrivée ou la description
+    p_balade: balade, p_arrivee: arrivee, p_description: description,
   });
   if (error || data === false) {
     console.error(error);
@@ -838,6 +905,9 @@ $("ns-annuler").addEventListener("click", () => {
   champSpot.focus();
 });
 $("ns-ajouter").addEventListener("click", (e) => pendant(e.currentTarget, ajouterSpot));
+
+$("f-balade").addEventListener("change", majModeBalade);
+$("f-description").addEventListener("input", majCompteur);
 
 $("btn-notifs").addEventListener("click", (e) => pendant(e.currentTarget, activerNotifs));
 $("btn-desactiver").addEventListener("click", (e) => pendant(e.currentTarget, desactiverNotifs));

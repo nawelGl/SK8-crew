@@ -566,6 +566,109 @@ button {
   color: var(--gris);
 }
 
+.champ textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  resize: none;
+  border-radius: 12px;
+  border: 1.5px solid var(--trait-champ);
+  background: var(--carte);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.champ textarea:focus {
+  outline: 2px solid var(--violet);
+  outline-offset: 1px;
+  border-color: var(--violet);
+}
+
+.compteur {
+  align-self: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Case à cocher « Balade » */
+.case {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--trait-champ);
+  background: var(--carte);
+}
+
+.case:has(input:checked) {
+  border-color: var(--violet);
+  background: var(--violet-pale);
+}
+
+.case input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--violet);
+}
+
+.case-texte {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.case-titre {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* Cartes : badge balade et description */
+.badge-balade {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--violet-fonce);
+  background: var(--violet-doux);
+}
+
+.description-session {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6B6660;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.description-session.ouverte {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.voir-plus {
+  align-self: flex-start;
+  margin-top: -10px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--violet);
+}
+
 .champ input {
   height: 48px;
   width: 100%;

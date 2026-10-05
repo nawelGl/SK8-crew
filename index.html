@@ -111,8 +111,16 @@
           </div>
         </div>
 
+        <label class="case" for="f-balade">
+          <input id="f-balade" type="checkbox">
+          <span class="case-texte">
+            <span class="case-titre">Balade</span>
+            <span class="aide">Un parcours street plutôt qu'un spot</span>
+          </span>
+        </label>
+
         <div class="champ champ-spot">
-          <label for="f-spot">Spot</label>
+          <label for="f-spot" id="label-spot">Spot</label>
           <div class="champ-icone">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -128,10 +136,10 @@
           <section id="nouveau-spot" class="nouveau-spot" aria-labelledby="ns-titre" hidden>
             <div>
               <h2 id="ns-titre">Nouveau spot</h2>
-              <p class="aide">Il sera proposé à tout le crew pour les prochaines sessions.</p>
+              <p class="aide" id="ns-aide">Il sera proposé à tout le crew pour les prochaines sessions.</p>
             </div>
             <div class="champ">
-              <label for="ns-nom">Nom du spot</label>
+              <label for="ns-nom" id="ns-label-nom">Nom du spot</label>
               <input id="ns-nom" type="text" maxlength="70" placeholder="Ex. Skatepark couvert">
             </div>
             <div class="champ">
@@ -140,9 +148,21 @@
             </div>
             <div class="grille-2">
               <button type="button" id="ns-annuler" class="bouton-secondaire">Annuler</button>
-              <button type="button" id="ns-ajouter" class="bouton-sombre">Ajouter le spot</button>
+              <button type="button" id="ns-ajouter" class="bouton-sombre">Ajouter</button>
             </div>
           </section>
+        </div>
+
+        <div id="champ-arrivee" class="champ" hidden>
+          <label for="f-arrivee">Arrivée <span class="facultatif">facultatif</span></label>
+          <input id="f-arrivee" type="text" maxlength="70" placeholder="Paris 13, les quais…">
+        </div>
+
+        <div class="champ">
+          <label for="f-description">Description <span class="facultatif">facultatif</span></label>
+          <textarea id="f-description" rows="3" maxlength="280" placeholder="Un truc a spécifier sur la session ? Si non nécessaire laissez vide !"
+            aria-describedby="compteur-description"></textarea>
+          <p id="compteur-description" class="aide compteur">0 / 280</p>
         </div>
 
         <div id="champ-pseudo" class="champ">
