@@ -5,11 +5,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#F1EFEA">
+  <meta name="robots" content="noindex, nofollow">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Skate">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="robots" content="noindex, nofollow">
   <title>Sessions skate</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icones/icone-192.png">
@@ -168,6 +168,23 @@
       <div class="grille-2">
         <button type="button" id="d-annuler" class="bouton-secondaire">Annuler</button>
         <button type="submit" class="bouton-sombre">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== Fenêtre correction d'adresse ===== -->
+  <dialog id="dialog-adresse" class="dialogue" aria-labelledby="a-titre">
+    <form id="form-adresse" novalidate>
+      <h2 id="a-titre">Corriger l'adresse</h2>
+      <p class="aide"><strong id="a-spot"></strong>. La nouvelle adresse sera visible par tout le crew.</p>
+      <div class="champ">
+        <label for="a-adresse">Adresse</label>
+        <input id="a-adresse" type="text" maxlength="160" placeholder="Rue, ville" required>
+      </div>
+      <p id="a-erreur" class="erreur" role="alert" hidden></p>
+      <div class="grille-2">
+        <button type="button" id="a-annuler" class="bouton-secondaire">Annuler</button>
+        <button type="submit" id="a-valider" class="bouton-sombre">Enregistrer</button>
       </div>
     </form>
   </dialog>

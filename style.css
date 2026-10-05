@@ -266,6 +266,23 @@ button {
   color: var(--violet-fonce);
 }
 
+.ligne-adresse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+}
+
+.bouton-corriger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aide-ok .bouton-corriger {
+  margin-left: 4px;
+}
+
 .carte-bas {
   display: flex;
   align-items: center;

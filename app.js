@@ -82,6 +82,7 @@ const ICONES = {
   horloge: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
   plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  crayon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
   repere: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
 };
 
@@ -176,7 +177,7 @@ async function assurerPrenom() {
 async function chargerSessions() {
   const { data, error } = await supabase
     .from("sessions")
-    .select("id, date, heure, propose_par, spot:spots(nom, adresse), participants(id, prenom, created_at)")
+    .select("id, date, heure, propose_par, spot:spots(id, nom, adresse), participants(id, prenom, created_at)")
     .gte("date", aujourdhui())
     .order("date")
     .order("heure");
@@ -249,10 +250,13 @@ function carteSession(s) {
         el("span", { class: "sr" }, fmtLong.format(d)),
         el("h2", { class: "spot" }, spotNom),
         el("span", { class: "meta" }, icone("horloge"), meta),
-        s.spot && el("a", {
-          class: "lien-carte", href: lienCarte(s.spot), target: "_blank", rel: "noopener",
-          "aria-label": `Ouvrir ${s.spot.nom} dans les cartes`,
-        }, icone("repere"), s.spot.adresse || "Voir sur la carte"),
+        s.spot && el("div", { class: "ligne-adresse" },
+          el("a", {
+            class: "lien-carte", href: lienCarte(s.spot), target: "_blank", rel: "noopener",
+            "aria-label": `Ouvrir ${s.spot.nom} dans les cartes`,
+          }, icone("repere"), s.spot.adresse || "Voir sur la carte"),
+          boutonCorriger(s.spot),
+        ),
         el("span", { class: "auteur" }, `Proposée par ${s.propose_par}`),
       ),
     ),
@@ -365,7 +369,7 @@ function choisirSpot(sp) {
   $("f-spot").value = sp.nom;
   fermerSuggestions();
   const info = $("spot-choisi");
-  info.replaceChildren(icone("check"), sp.adresse ? `Spot connu · ${sp.adresse}` : "Spot connu");
+  info.replaceChildren(icone("check"), sp.adresse ? `Spot connu · ${sp.adresse}` : "Spot connu", boutonCorriger(sp));
   info.hidden = false;
   $("erreur-form").hidden = true;
 }
@@ -398,6 +402,86 @@ async function ajouterSpot() {
   $("nouveau-spot").hidden = true;
   choisirSpot(sp);
   toast(existait ? "Ce spot existait déjà, il est sélectionné." : "Spot ajouté.");
+}
+
+/* =========================================================
+   Correction de l'adresse d'un spot
+   ========================================================= */
+function boutonCorriger(spot) {
+  return el("button", {
+    type: "button", class: "bouton-discret bouton-corriger",
+    "aria-label": `Corriger l'adresse de ${spot.nom}`,
+    onclick: () => corrigerAdresse(spot),
+  }, icone("crayon"), "Corriger");
+}
+
+// Ouvre la fenêtre et renvoie le spot mis à jour (ou null si annulé)
+function fenetreAdresse(spot) {
+  return new Promise((resolve) => {
+    const dialogue = $("dialog-adresse");
+    const form = $("form-adresse");
+    const champ = $("a-adresse");
+    const annuler = $("a-annuler");
+    const erreur = $("a-erreur");
+    $("a-spot").textContent = spot.nom;
+    champ.value = spot.adresse || "";
+    erreur.hidden = true;
+
+    const terminer = (valeur) => {
+      form.removeEventListener("submit", valider);
+      annuler.removeEventListener("click", fermer);
+      dialogue.removeEventListener("cancel", fermer);
+      dialogue.close();
+      resolve(valeur);
+    };
+    const valider = async (e) => {
+      e.preventDefault();
+      const adresse = champ.value.trim();
+      if (!adresse) return champ.focus();
+
+      const bouton = $("a-valider");
+      bouton.disabled = true;
+      const { data, error } = await supabase.rpc("modifier_adresse_spot", {
+        p_spot: spot.id, p_adresse: adresse, p_prenom: prenom,
+      });
+      bouton.disabled = false;
+
+      if (error) {
+        console.error(error);
+        erreur.textContent = "L'adresse n'a pas pu être enregistrée. Réessaie dans un instant.";
+        erreur.hidden = false;
+        return;
+      }
+      terminer(Array.isArray(data) ? data[0] : data);
+    };
+    const fermer = (e) => {
+      e.preventDefault();
+      terminer(null);
+    };
+
+    form.addEventListener("submit", valider);
+    annuler.addEventListener("click", fermer);
+    dialogue.addEventListener("cancel", fermer);
+    dialogue.showModal();
+    champ.focus();
+    champ.select();
+  });
+}
+
+async function corrigerAdresse(spot) {
+  // Le prénom est enregistré dans l'historique des corrections
+  const p = await assurerPrenom();
+  if (!p) return;
+
+  const majSpot = await fenetreAdresse(spot);
+  if (!majSpot) return;
+
+  const i = spots.findIndex((x) => x.id === majSpot.id);
+  if (i >= 0) spots[i] = majSpot;
+  if (spotChoisi?.id === majSpot.id) choisirSpot(majSpot);
+
+  toast("Adresse mise à jour, merci !");
+  await chargerSessions();
 }
 
 /* =========================================================
@@ -502,7 +586,10 @@ supabase
   .channel("crew")
   .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, rechargerBientot)
   .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, rechargerBientot)
-  .on("postgres_changes", { event: "*", schema: "public", table: "spots" }, chargerSpots)
+  .on("postgres_changes", { event: "*", schema: "public", table: "spots" }, () => {
+    chargerSpots();
+    rechargerBientot(); // les cartes de session affichent aussi l'adresse
+  })
   .subscribe();
 
 // Sur mobile, la connexion temps réel peut se couper en arrière-plan : on recharge au retour
