@@ -273,14 +273,62 @@ button {
   gap: 0 12px;
 }
 
-.bouton-corriger {
+.bouton-crayon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  color: var(--gris);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
 }
 
-.aide-ok .bouton-corriger {
-  margin-left: 4px;
+.bouton-crayon:hover {
+  background: var(--violet-pale);
+  color: var(--violet-fonce);
+}
+
+.aide-ok .bouton-crayon {
+  margin: -12px 0;
+}
+
+.suggestion-ligne {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--pierre);
+  background: var(--carte);
+}
+
+.suggestion-ligne .suggestion {
+  flex: 1;
+  min-width: 0;
+  border-bottom: none;
+}
+
+.suggestion-ligne .bouton-crayon {
+  margin-right: 6px;
+}
+
+.actions-createur {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 20px;
+  margin: -8px 0 -12px;
+}
+
+.actions-createur .bouton-lien {
+  margin: 0;
+}
+
+.actions-createur .bouton-modifier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--violet);
 }
 
 .carte-bas {
@@ -479,6 +527,11 @@ button {
 .champ label {
   font-size: 14px;
   font-weight: 700;
+}
+
+.facultatif {
+  font-weight: 500;
+  color: var(--gris);
 }
 
 .champ input {

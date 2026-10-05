@@ -177,7 +177,7 @@ async function assurerPrenom() {
 async function chargerSessions() {
   const { data, error } = await supabase
     .from("sessions")
-    .select("id, date, heure, propose_par, spot:spots(id, nom, adresse), participants(id, prenom, created_at)")
+    .select("id, date, heure, heure_fin, propose_par, spot:spots(id, nom, adresse), participants(id, prenom, created_at)")
     .gte("date", aujourdhui())
     .order("date")
     .order("heure");
@@ -227,7 +227,8 @@ function carteSession(s) {
     : `${n} dispo · ${gens.map((g) => g.nom).join(", ")}`;
 
   const spotNom = s.spot?.nom ?? "Spot supprimé";
-  const meta = [estAujourdhui ? "Aujourd'hui" : null, formatHeure(s.heure)]
+  const plage = s.heure_fin ? `${formatHeure(s.heure)} – ${formatHeure(s.heure_fin)}` : formatHeure(s.heure);
+  const meta = [estAujourdhui ? "Aujourd'hui" : null, plage]
     .filter(Boolean)
     .join(" · ");
 
@@ -255,7 +256,6 @@ function carteSession(s) {
             class: "lien-carte", href: lienCarte(s.spot), target: "_blank", rel: "noopener",
             "aria-label": `Ouvrir ${s.spot.nom} dans les cartes`,
           }, icone("repere"), s.spot.adresse || "Voir sur la carte"),
-          boutonCorriger(s.spot),
         ),
         el("span", { class: "auteur" }, `Proposée par ${s.propose_par}`),
       ),
@@ -269,9 +269,14 @@ function carteSession(s) {
       ),
       bouton,
     ),
-    creations[s.id] && el("button", { type: "button", class: "bouton-lien",
-      onclick: (e) => pendant(e.currentTarget, () => supprimerSession(s)) },
-      "Supprimer ma session"),
+    creations[s.id] && el("div", { class: "actions-createur" },
+      el("button", { type: "button", class: "bouton-lien bouton-modifier",
+        onclick: () => ouvrirModification(s) },
+        icone("crayon"), "Modifier"),
+      el("button", { type: "button", class: "bouton-lien",
+        onclick: (e) => pendant(e.currentTarget, () => supprimerSession(s)) },
+        "Supprimer ma session"),
+    ),
   );
 }
 
@@ -347,9 +352,12 @@ function majSuggestions() {
   const boite = $("suggestions");
   boite.replaceChildren(
     ...resultats.slice(0, 6).map((sp) =>
-      el("button", { type: "button", class: "suggestion", role: "option", onclick: () => choisirSpot(sp) },
-        el("span", { class: "suggestion-nom" }, sp.nom),
-        sp.adresse && el("span", { class: "suggestion-adresse" }, sp.adresse),
+      el("div", { class: "suggestion-ligne" },
+        el("button", { type: "button", class: "suggestion", role: "option", onclick: () => choisirSpot(sp) },
+          el("span", { class: "suggestion-nom" }, sp.nom),
+          sp.adresse && el("span", { class: "suggestion-adresse" }, sp.adresse),
+        ),
+        boutonCorriger(sp),
       )),
   );
   if (q && resultats.length === 0) {
@@ -409,10 +417,10 @@ async function ajouterSpot() {
    ========================================================= */
 function boutonCorriger(spot) {
   return el("button", {
-    type: "button", class: "bouton-discret bouton-corriger",
-    "aria-label": `Corriger l'adresse de ${spot.nom}`,
+    type: "button", class: "bouton-crayon",
+    "aria-label": `Corriger l'adresse de ${spot.nom}`, title: "Corriger l'adresse",
     onclick: () => corrigerAdresse(spot),
-  }, icone("crayon"), "Corriger");
+  }, icone("crayon"));
 }
 
 // Ouvre la fenêtre et renvoie le spot mis à jour (ou null si annulé)
@@ -480,6 +488,7 @@ async function corrigerAdresse(spot) {
   if (i >= 0) spots[i] = majSpot;
   if (spotChoisi?.id === majSpot.id) choisirSpot(majSpot);
 
+  if (!$("suggestions").hidden || !spotChoisi) majSuggestions();
   toast("Adresse mise à jour, merci !");
   await chargerSessions();
 }
@@ -487,15 +496,35 @@ async function corrigerAdresse(spot) {
 /* =========================================================
    Formulaire de session
    ========================================================= */
+// Session en cours de modification (null = on crée une nouvelle session)
+let sessionEnEdition = null;
+
 function preparerFormulaire() {
+  const edition = Boolean(sessionEnEdition);
+  $("titre-form").textContent = edition ? "Modifier la session" : "Nouvelle session";
+  $("btn-publier").textContent = edition ? "Enregistrer les modifications" : "Publier la session";
+  $("champ-pseudo").hidden = edition; // le créateur ne change pas
+
   const date = $("f-date");
   date.min = aujourdhui();
   if (!date.value) date.value = aujourdhui();
   if (!$("f-pseudo").value) $("f-pseudo").value = prenom;
 }
 
+function ouvrirModification(s) {
+  reinitialiserFormulaire();
+  sessionEnEdition = s;
+  $("f-date").value = s.date;
+  $("f-heure").value = s.heure.slice(0, 5);
+  $("f-heure-fin").value = s.heure_fin ? s.heure_fin.slice(0, 5) : "";
+  const spot = s.spot && (spots.find((sp) => sp.id === s.spot.id) || s.spot);
+  if (spot) choisirSpot(spot);
+  location.hash = "modifier";
+}
+
 function reinitialiserFormulaire() {
   $("form-session").reset();
+  sessionEnEdition = null;
   spotChoisi = null;
   $("spot-choisi").hidden = true;
   $("nouveau-spot").hidden = true;
@@ -512,6 +541,7 @@ function afficherErreur(message) {
 async function publier() {
   const date = $("f-date").value;
   const heure = $("f-heure").value;
+  const heureFin = $("f-heure-fin").value; // vide si non renseignée
   const pseudo = $("f-pseudo").value.trim();
 
   // Si le nom tapé correspond exactement à un spot connu, on le prend
@@ -523,15 +553,19 @@ async function publier() {
   const erreur =
     !date ? "Choisis une date." :
     date < aujourdhui() ? "Cette date est déjà passée." :
-    !heure ? "Choisis une heure." :
+    !heure ? "Choisis une heure de début." :
+    heureFin && heureFin <= heure ? "L'heure de fin doit être après le début." :
     !spotChoisi ? "Choisis un spot dans la liste, ou ajoute-le comme nouveau spot." :
-    !pseudo ? "Indique ton prénom." :
+    !pseudo && !sessionEnEdition ? "Indique ton prénom." :
     null;
   if (erreur) return afficherErreur(erreur);
+
+  if (sessionEnEdition) return enregistrerModification(date, heure, heureFin);
 
   const { data, error } = await supabase.rpc("creer_session", {
     p_date: date, p_heure: heure, p_spot: spotChoisi.id, p_propose_par: pseudo,
     p_abonnement: stock.lire(CLES.abonnement, null), // pour ne pas se notifier soi-même
+    p_heure_fin: heureFin || null,
   });
   if (error) {
     console.error(error);
@@ -562,11 +596,35 @@ async function publier() {
   await chargerSessions();
 }
 
+async function enregistrerModification(date, heure, heureFin) {
+  const s = sessionEnEdition;
+  const { data, error } = await supabase.rpc("modifier_session", {
+    p_id: s.id, p_jeton: creations[s.id],
+    p_date: date, p_heure: heure, p_heure_fin: heureFin || null, p_spot: spotChoisi.id,
+  });
+  if (error || data === false) {
+    console.error(error);
+    return afficherErreur("La session n'a pas pu être modifiée. Réessaie dans un instant.");
+  }
+  reinitialiserFormulaire();
+  location.hash = "";
+  toast("Session modifiée. Les inscrits sont prévenus.");
+  await chargerSessions();
+}
+
 /* =========================================================
    Navigation entre les deux vues
    ========================================================= */
 function afficherVue() {
-  const formulaire = location.hash === "#proposer";
+  // Après un rechargement de page, la session à modifier est perdue : retour à la liste
+  if (location.hash === "#modifier" && !sessionEnEdition) {
+    location.hash = "";
+    return;
+  }
+  // En quittant le formulaire de modification sans enregistrer, on l'oublie
+  if (location.hash !== "#modifier" && sessionEnEdition) reinitialiserFormulaire();
+
+  const formulaire = location.hash === "#proposer" || location.hash === "#modifier";
   $("vue-liste").hidden = formulaire;
   $("vue-formulaire").hidden = !formulaire;
   window.scrollTo(0, 0);

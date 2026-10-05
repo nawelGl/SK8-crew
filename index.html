@@ -92,18 +92,22 @@
             <path d="M15 5l-7 7 7 7" />
           </svg>
         </button>
-        <h1 class="titre-form">Nouvelle session</h1>
+        <h1 id="titre-form" class="titre-form">Nouvelle session</h1>
       </header>
 
       <form id="form-session" class="contenu formulaire" novalidate>
+        <div class="champ">
+          <label for="f-date">Date</label>
+          <input id="f-date" type="date" required>
+        </div>
         <div class="grille-2">
           <div class="champ">
-            <label for="f-date">Date</label>
-            <input id="f-date" type="date" required>
+            <label for="f-heure">Début</label>
+            <input id="f-heure" type="time" required>
           </div>
           <div class="champ">
-            <label for="f-heure">Heure</label>
-            <input id="f-heure" type="time" required>
+            <label for="f-heure-fin">Fin <span class="facultatif">facultatif</span></label>
+            <input id="f-heure-fin" type="time">
           </div>
         </div>
 
@@ -141,7 +145,7 @@
           </section>
         </div>
 
-        <div class="champ">
+        <div id="champ-pseudo" class="champ">
           <label for="f-pseudo">Proposée par</label>
           <input id="f-pseudo" type="text" maxlength="30" autocomplete="given-name" required>
           <p class="aide">Retenu sur ce téléphone, pas besoin de compte.</p>
