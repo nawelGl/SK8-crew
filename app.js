@@ -549,6 +549,9 @@ async function corrigerAdresse(spot) {
 // Adapte le formulaire selon que la case « Balade » est cochée ou non
 function majModeBalade() {
   const balade = $("f-balade").checked;
+  $("aide-type").textContent = balade
+    ? "Un départ, une potentielle arrivée et un itinéraire street."
+    : "Un lieu, une heure, une session.";
   $("label-spot").textContent = balade ? "Départ" : "Spot";
   $("f-spot").placeholder = balade ? "Commence à taper un lieu de départ…" : "Commence à taper un spot…";
   $("suggestions").setAttribute("aria-label", balade ? "Départs de balade" : "Spots");
@@ -596,6 +599,7 @@ function ouvrirModification(s) {
   $("f-heure").value = s.heure.slice(0, 5);
   $("f-heure-fin").value = s.heure_fin ? s.heure_fin.slice(0, 5) : "";
   $("f-balade").checked = Boolean(s.balade);
+  $("f-type-spot").checked = !s.balade;
   majModeBalade();
   $("f-arrivee").value = s.arrivee || "";
   $("f-description").value = s.description || "";
@@ -906,7 +910,10 @@ $("ns-annuler").addEventListener("click", () => {
 });
 $("ns-ajouter").addEventListener("click", (e) => pendant(e.currentTarget, ajouterSpot));
 
-$("f-balade").addEventListener("change", majModeBalade);
+// Les deux boutons du sélecteur de type
+for (const radio of document.querySelectorAll('input[name="type-session"]')) {
+  radio.addEventListener("change", majModeBalade);
+}
 $("f-description").addEventListener("input", majCompteur);
 
 $("btn-notifs").addEventListener("click", (e) => pendant(e.currentTarget, activerNotifs));

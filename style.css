@@ -590,40 +590,66 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* Case à cocher « Balade » */
-.case {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1.5px solid var(--trait-champ);
-  background: var(--carte);
-}
-
-.case:has(input:checked) {
-  border-color: var(--violet);
-  background: var(--violet-pale);
-}
-
-.case input {
-  width: 22px;
-  height: 22px;
+/* Sélecteur de type : Spot / Balade */
+.types-session {
   margin: 0;
-  flex-shrink: 0;
-  accent-color: var(--violet);
-}
-
-.case-texte {
+  padding: 0;
+  border: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  min-width: 0;
 }
 
-.case-titre {
+.types-session legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.segment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #E2DFD8;
+}
+
+.segment-option {
+  position: relative;
+  cursor: pointer;
+}
+
+.segment-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.segment-bouton {
+  min-height: 44px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: 15px;
   font-weight: 700;
+  color: var(--gris);
+}
+
+.segment-option input:checked+.segment-bouton {
+  background: var(--carte);
+  color: var(--violet-fonce);
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.1);
+}
+
+.segment-option input:focus-visible+.segment-bouton {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
 }
 
 /* Cartes : badge balade et description */

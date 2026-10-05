@@ -96,6 +96,36 @@
       </header>
 
       <form id="form-session" class="contenu formulaire" novalidate>
+        <fieldset class="types-session">
+          <legend>Type</legend>
+          <div class="segment">
+            <label class="segment-option">
+              <input type="radio" name="type-session" id="f-type-spot" value="spot" checked>
+              <span class="segment-bouton">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" />
+                  <circle cx="12" cy="9.5" r="2.5" />
+                </svg>
+                Spot
+              </span>
+            </label>
+            <label class="segment-option">
+              <input type="radio" name="type-session" id="f-balade" value="balade">
+              <span class="segment-bouton">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="6" cy="19" r="2" />
+                  <circle cx="18" cy="5" r="2" />
+                  <path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-8a3.5 3.5 0 0 1 0-7H12" />
+                </svg>
+                Balade
+              </span>
+            </label>
+          </div>
+          <p id="aide-type" class="aide">Un lieu, une heure, une session.</p>
+        </fieldset>
+
         <div class="champ">
           <label for="f-date">Date</label>
           <input id="f-date" type="date" required>
@@ -111,13 +141,6 @@
           </div>
         </div>
 
-        <label class="case" for="f-balade">
-          <input id="f-balade" type="checkbox">
-          <span class="case-texte">
-            <span class="case-titre">Balade</span>
-            <span class="aide">Un parcours street plutôt qu'un spot</span>
-          </span>
-        </label>
 
         <div class="champ champ-spot">
           <label for="f-spot" id="label-spot">Spot</label>
@@ -160,7 +183,7 @@
 
         <div class="champ">
           <label for="f-description">Description <span class="facultatif">facultatif</span></label>
-          <textarea id="f-description" rows="3" maxlength="280" placeholder="Un truc a spécifier sur la session ? Si non nécessaire laissez vide !"
+          <textarea id="f-description" rows="3" maxlength="280" placeholder="Un truc à spécifier sur la session ? Sinon laissez vide !"
             aria-describedby="compteur-description"></textarea>
           <p id="compteur-description" class="aide compteur">0 / 280</p>
         </div>
