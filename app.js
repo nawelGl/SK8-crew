@@ -82,6 +82,7 @@ const ICONES = {
   horloge: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
   plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  croix: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   crayon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
   repere: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
 };
@@ -177,8 +178,9 @@ async function assurerPrenom() {
 async function chargerSessions() {
   const { data, error } = await supabase
     .from("sessions")
-    .select("id, date, heure, heure_fin, propose_par, spot:spots(id, nom, adresse), participants(id, prenom, created_at)")
+    .select("id, date, heure, heure_fin, propose_par, spot:spots(id, nom, adresse), participants(id, prenom, statut, created_at)")
     .gte("date", aujourdhui())
+    .is("annulee_le", null) // les sessions annulées restent en base mais ne s'affichent plus
     .order("date")
     .order("heure");
 
@@ -215,16 +217,17 @@ function afficherSessions() {
 function carteSession(s) {
   const d = dateLocale(s.date);
   const maPart = participations[s.id];
-  const jeVais = Boolean(maPart);
   const estAujourdhui = s.date === aujourdhui();
 
   const gens = [...s.participants]
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .map((p) => ({ nom: maPart && p.id === maPart.id ? "Toi" : p.prenom, moi: maPart && p.id === maPart.id }));
-  const n = gens.length;
-  const compte = n === 0
-    ? "Personne pour l'instant"
-    : `${n} dispo · ${gens.map((g) => g.nom).join(", ")}`;
+    .map((p) => {
+      const moi = Boolean(maPart && p.id === maPart.id);
+      return { nom: moi ? "Toi" : p.prenom, moi, statut: p.statut || "dispo" };
+    });
+  const dispos = gens.filter((g) => g.statut === "dispo");
+  const pasDispos = gens.filter((g) => g.statut === "pas_dispo");
+  const maReponse = gens.find((g) => g.moi)?.statut ?? null; // "dispo", "pas_dispo" ou null
 
   const spotNom = s.spot?.nom ?? "Spot supprimé";
   const plage = s.heure_fin ? `${formatHeure(s.heure)} – ${formatHeure(s.heure_fin)}` : formatHeure(s.heure);
@@ -232,13 +235,24 @@ function carteSession(s) {
     .filter(Boolean)
     .join(" · ");
 
-  const bouton = jeVais
-    ? el("button", { type: "button", class: "bouton-rejoindre actif", "aria-pressed": "true",
-        onclick: (e) => pendant(e.currentTarget, () => quitter(s)) },
-        icone("check"), "J'y vais")
-    : el("button", { type: "button", class: "bouton-rejoindre", "aria-pressed": "false",
-        onclick: (e) => pendant(e.currentTarget, () => rejoindre(s)) },
-        "Je viens");
+  const boutons = el("div", { class: "boutons-reponse" },
+    el("button", {
+      type: "button", class: maReponse === "dispo" ? "bouton-reponse viens actif" : "bouton-reponse viens",
+      "aria-pressed": String(maReponse === "dispo"),
+      onclick: (e) => pendant(e.currentTarget, () => repondre(s, "dispo", maReponse)),
+    }, maReponse === "dispo" && icone("check"), maReponse === "dispo" ? "J'y vais" : "Je viens"),
+    el("button", {
+      type: "button", class: maReponse === "pas_dispo" ? "bouton-reponse pas-dispo actif" : "bouton-reponse pas-dispo",
+      "aria-pressed": String(maReponse === "pas_dispo"),
+      onclick: (e) => pendant(e.currentTarget, () => repondre(s, "pas_dispo", maReponse)),
+    }, maReponse === "pas_dispo" && icone("croix"), "Pas dispo"),
+  );
+
+  const groupe = (titre, liste, classe, nomIcone) => liste.length > 0 && el("div", { class: "groupe-reponses" },
+    el("span", { class: "titre-groupe" }, `${titre} (${liste.length})`),
+    el("div", { class: "pastilles" },
+      liste.map((g) => el("span", { class: `pastille ${classe}${g.moi ? " moi" : ""}` }, icone(nomIcone), g.nom))),
+  );
 
   return el("article", { class: "carte" },
     el("div", { class: "carte-haut" },
@@ -260,31 +274,40 @@ function carteSession(s) {
         el("span", { class: "auteur" }, `Proposée par ${s.propose_par}`),
       ),
     ),
-    el("div", { class: "carte-bas" },
-      el("div", { class: "participants" },
-        n > 0 && el("div", { class: "avatars", "aria-hidden": "true" },
-          gens.slice(0, 5).map((g) =>
-            el("span", { class: g.moi ? "avatar moi" : "avatar" }, g.moi ? "Toi" : g.nom.charAt(0).toUpperCase()))),
-        el("span", { class: "compte" }, compte),
-      ),
-      bouton,
+    el("div", { class: "reponses" },
+      dispos.length === 0 && el("span", { class: "compte" }, "Personne de dispo pour l'instant"),
+      groupe("Dispo", dispos, "dispo", "check"),
+      groupe("Pas dispo", pasDispos, "pas-dispo", "croix"),
     ),
+    boutons,
     creations[s.id] && el("div", { class: "actions-createur" },
       el("button", { type: "button", class: "bouton-lien bouton-modifier",
         onclick: () => ouvrirModification(s) },
         icone("crayon"), "Modifier"),
       el("button", { type: "button", class: "bouton-lien",
         onclick: (e) => pendant(e.currentTarget, () => supprimerSession(s)) },
-        "Supprimer ma session"),
+        "Annuler la session"),
     ),
   );
 }
 
-async function rejoindre(s) {
+// Clic sur « Je viens » ou « Pas dispo » :
+// même bouton que la réponse actuelle → on retire sa réponse ;
+// autre bouton → on change de réponse ; aucune réponse → on répond.
+async function repondre(s, statut, reponseActuelle) {
+  if (reponseActuelle === statut) return quitter(s);
+  if (reponseActuelle) {
+    const retire = await quitter(s, { recharger: false });
+    if (!retire) return;
+  }
+  await rejoindre(s, statut);
+}
+
+async function rejoindre(s, statut = "dispo") {
   const p = await assurerPrenom();
   if (!p) return;
   const { data, error } = await supabase.rpc("rejoindre_session", {
-    p_session: s.id, p_prenom: p,
+    p_session: s.id, p_prenom: p, p_statut: statut,
     p_abonnement: stock.lire(CLES.abonnement, null), // pour que le créateur soit prévenu
   });
   if (error) {
@@ -298,31 +321,32 @@ async function rejoindre(s) {
   await chargerSessions();
 }
 
-async function quitter(s) {
+async function quitter(s, { recharger = true } = {}) {
   const part = participations[s.id];
   const { data, error } = await supabase.rpc("quitter_session", { p_id: part.id, p_jeton: part.jeton });
   if (error || data === false) {
     console.error(error);
-    toast("Impossible de te retirer de cette session.");
-    return;
+    toast("Impossible de modifier ta réponse.");
+    return false;
   }
   delete participations[s.id];
   sauverJetons();
-  await chargerSessions();
+  if (recharger) await chargerSessions();
+  return true;
 }
 
 async function supprimerSession(s) {
-  if (!confirm("Supprimer cette session pour tout le monde ?")) return;
+  if (!confirm("Annuler cette session ? Les personnes inscrites seront prévenues.")) return;
   const { data, error } = await supabase.rpc("supprimer_session", { p_id: s.id, p_jeton: creations[s.id] });
   if (error || data === false) {
     console.error(error);
-    toast("Impossible de supprimer cette session.");
+    toast("Impossible d'annuler cette session.");
     return;
   }
   delete creations[s.id];
   delete participations[s.id];
   sauverJetons();
-  toast("Session supprimée.");
+  toast("Session annulée. Les inscrits sont prévenus.");
   await chargerSessions();
 }
 

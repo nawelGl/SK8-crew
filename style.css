@@ -331,75 +331,107 @@ button {
   color: var(--violet);
 }
 
-.carte-bas {
+.reponses {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.participants {
+.groupe-reponses {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 0;
 }
 
-.avatars {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  margin-right: -8px;
-  border-radius: 999px;
-  border: 2px solid var(--carte);
-  background: var(--pierre);
+.titre-groupe {
   font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-weight: 600;
+  color: var(--gris);
 }
 
-.avatar.moi {
-  background: var(--violet-doux);
-  color: var(--violet-fonce);
+.pastilles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pastille {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pastille.dispo {
+  background: #E3F4E6;
+  color: #1B6A31;
+}
+
+.pastille.pas-dispo {
+  background: #FDE8E8;
+  color: #A12626;
+}
+
+.pastille.moi {
+  outline: 1.5px solid currentColor;
+  outline-offset: -1.5px;
 }
 
 .compte {
   font-size: 13px;
   color: var(--gris);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.bouton-rejoindre {
+.boutons-reponse {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bouton-reponse {
   min-height: 44px;
-  padding: 0 18px;
+  padding: 0 12px;
   border-radius: 12px;
-  flex-shrink: 0;
-  border: 1.5px solid var(--encre);
-  background: var(--encre);
-  color: #FFFFFF;
   font-weight: 700;
   font-size: 15px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
-.bouton-rejoindre.actif {
+.bouton-reponse.viens {
+  border: 1.5px solid var(--encre);
+  background: var(--encre);
+  color: #FFFFFF;
+}
+
+.bouton-reponse.viens.actif {
   border-color: var(--violet);
   background: var(--violet-doux);
   color: var(--violet-fonce);
 }
 
-.bouton-rejoindre:disabled,
+.bouton-reponse.pas-dispo {
+  border: 1.5px solid var(--trait-champ);
+  background: var(--carte);
+  color: var(--encre);
+}
+
+.bouton-reponse.pas-dispo.actif {
+  border-color: #A12626;
+  background: #FDE8E8;
+  color: #A12626;
+}
+
+.bouton-reponse:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 .bouton-lien:disabled {
   opacity: 0.55;
   cursor: progress;
@@ -793,7 +825,7 @@ button {
 
 @media (prefers-reduced-motion: no-preference) {
 
-  .bouton-rejoindre,
+  .bouton-reponse,
   .suggestion,
   .bouton-principal {
     transition: background-color 0.15s ease;
