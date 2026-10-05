@@ -82,7 +82,18 @@ const ICONES = {
   horloge: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
   plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  repere: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
 };
+
+// Lien vers l'appli de cartes du téléphone : Plans sur iPhone, Google Maps ailleurs
+function lienCarte(spot) {
+  const recherche = encodeURIComponent([spot.nom, spot.adresse].filter(Boolean).join(", "));
+  const iphone = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return iphone
+    ? `https://maps.apple.com/?q=${recherche}`
+    : `https://www.google.com/maps/search/?api=1&query=${recherche}`;
+}
 function icone(nom) {
   const s = document.createElement("span");
   s.className = "ico";
@@ -215,7 +226,7 @@ function carteSession(s) {
     : `${n} dispo · ${gens.map((g) => g.nom).join(", ")}`;
 
   const spotNom = s.spot?.nom ?? "Spot supprimé";
-  const meta = [estAujourdhui ? "Aujourd'hui" : null, formatHeure(s.heure), s.spot?.adresse || null]
+  const meta = [estAujourdhui ? "Aujourd'hui" : null, formatHeure(s.heure)]
     .filter(Boolean)
     .join(" · ");
 
@@ -238,6 +249,10 @@ function carteSession(s) {
         el("span", { class: "sr" }, fmtLong.format(d)),
         el("h2", { class: "spot" }, spotNom),
         el("span", { class: "meta" }, icone("horloge"), meta),
+        s.spot && el("a", {
+          class: "lien-carte", href: lienCarte(s.spot), target: "_blank", rel: "noopener",
+          "aria-label": `Ouvrir ${s.spot.nom} dans les cartes`,
+        }, icone("repere"), s.spot.adresse || "Voir sur la carte"),
         el("span", { class: "auteur" }, `Proposée par ${s.propose_par}`),
       ),
     ),

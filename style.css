@@ -242,6 +242,30 @@ button {
   color: var(--gris);
 }
 
+.lien-carte {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 0;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--violet);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.lien-carte .ico {
+  margin-top: 1px;
+}
+
+.lien-carte:hover {
+  color: var(--violet-fonce);
+}
+
 .carte-bas {
   display: flex;
   align-items: center;
