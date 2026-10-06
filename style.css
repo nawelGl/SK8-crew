@@ -652,6 +652,39 @@ button {
   outline-offset: 2px;
 }
 
+/* Carte d'une session annulée : réduite et grisée */
+.carte-annulee {
+  background: #F7F6F3;
+  border-style: dashed;
+}
+
+.carte-annulee .bloc-date {
+  background: #D6D3CD;
+  color: #57534E;
+}
+
+.carte-annulee .spot {
+  color: #6B6660;
+}
+
+.carte-annulee .meta,
+.carte-annulee .auteur {
+  color: #6B6660;
+}
+
+.badge-annulee {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #57534E;
+  background: #E7E5E4;
+}
+
 /* Cartes : badge balade et description */
 .badge-balade {
   align-self: flex-start;

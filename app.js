@@ -179,9 +179,8 @@ async function assurerPrenom() {
 async function chargerSessions() {
   const { data, error } = await supabase
     .from("sessions")
-    .select("id, date, heure, heure_fin, propose_par, balade, arrivee, description, spot:spots(id, nom, adresse, type), participants(id, prenom, statut, created_at)")
+    .select("id, date, heure, heure_fin, propose_par, balade, arrivee, description, annulee_le, spot:spots(id, nom, adresse, type), participants(id, prenom, statut, created_at)")
     .gte("date", aujourdhui())
-    .is("annulee_le", null) // les sessions annulées restent en base mais ne s'affichent plus
     .order("date")
     .order("heure");
 
@@ -220,7 +219,36 @@ function afficherSessions() {
   }
 }
 
+// Version réduite et grisée d'une session annulée : on la voit encore jusqu'à minuit,
+// pour comprendre qu'elle a été annulée plutôt que croire à un bug
+function carteAnnulee(s) {
+  const d = dateLocale(s.date);
+  const spotNom = s.spot?.nom ?? (s.balade ? "Départ supprimé" : "Spot supprimé");
+  const titre = s.balade && s.arrivee ? `${spotNom} → ${s.arrivee}` : spotNom;
+  const plage = s.heure_fin ? `${formatHeure(s.heure)} – ${formatHeure(s.heure_fin)}` : formatHeure(s.heure);
+  const lieu = s.spot && (s.balade ? `Départ : ${s.spot.adresse || s.spot.nom}` : s.spot.adresse);
+
+  return el("article", { class: "carte carte-annulee" },
+    el("div", { class: "carte-haut" },
+      el("div", { class: "bloc-date", "aria-hidden": "true" },
+        el("span", { class: "bloc-date-petit" }, sansPoint(fmtJour.format(d))),
+        el("span", { class: "bloc-date-num" }, d.getDate()),
+        el("span", { class: "bloc-date-petit" }, sansPoint(fmtMois.format(d))),
+      ),
+      el("div", { class: "infos" },
+        el("span", { class: "sr" }, fmtLong.format(d)),
+        el("span", { class: "badge-annulee" }, icone("croix"), s.balade ? "Balade annulée" : "Session annulée"),
+        el("h2", { class: "spot" }, titre),
+        el("span", { class: "meta" }, icone("horloge"), plage),
+        lieu && el("span", { class: "meta" }, icone("repere"), lieu),
+        el("span", { class: "auteur" }, `Proposée par ${s.propose_par}`),
+      ),
+    ),
+  );
+}
+
 function carteSession(s) {
+  if (s.annulee_le) return carteAnnulee(s);
   const d = dateLocale(s.date);
   const maPart = participations[s.id];
   const estAujourdhui = s.date === aujourdhui();
