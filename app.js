@@ -1,18 +1,24 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_CLE, VAPID_CLE_PUBLIQUE } from "./config.js";
+import { SUPABASE_URL, SUPABASE_CLE, VAPID_CLE_PUBLIQUE, EN_DEV } from "./config.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_CLE);
+
+// En dev, la page passe en rose (voir « Thème de la version dev » dans style.css)
+if (EN_DEV) document.documentElement.classList.add("dev");
 const $ = (id) => document.getElementById(id);
 
 /* =========================================================
    Stockage local (prénom + jetons secrets)
    ========================================================= */
+// La dev et la prod sont sur le même domaine (nawelgl.github.io), donc partagent
+// le même stockage local : on préfixe les clés en dev pour ne jamais les mélanger.
+const PREFIXE = EN_DEV ? "dev." : "";
 const CLES = {
-  prenom: "skate.prenom",
-  participations: "skate.participations", // { sessionId: { id, jeton } }
-  creations: "skate.creations",           // { sessionId: jeton }
-  abonnement: "skate.abonnement",         // id de l'abonnement push de ce téléphone
-  encartMasque: "skate.encartMasque",     // dernier encart que la personne a fermé
+  prenom: `${PREFIXE}skate.prenom`,
+  participations: `${PREFIXE}skate.participations`, // { sessionId: { id, jeton } }
+  creations: `${PREFIXE}skate.creations`,           // { sessionId: jeton }
+  abonnement: `${PREFIXE}skate.abonnement`,         // id de l'abonnement push de ce téléphone
+  encartMasque: `${PREFIXE}skate.encartMasque`,     // dernier encart que la personne a fermé
 };
 const stock = {
   lire(cle, defaut) {
@@ -179,7 +185,7 @@ async function assurerPrenom() {
 async function chargerSessions() {
   const { data, error } = await supabase
     .from("sessions")
-    .select("id, date, heure, heure_fin, propose_par, balade, arrivee, description, annulee_le, spot:spots(id, nom, adresse, type), participants(id, prenom, statut, created_at)")
+    .select("id, date, heure, heure_fin, propose_par, balade, arrivee, description, annulee_le, spot:spots(id, nom, adresse, type), participants(id, prenom, statut, heure_arrivee, created_at)")
     .gte("date", aujourdhui())
     .order("date")
     .order("heure");
@@ -253,12 +259,15 @@ function carteSession(s) {
   const maPart = participations[s.id];
   const estAujourdhui = s.date === aujourdhui();
 
+  // Tri : ceux qui sont là dès le début d'abord, puis par heure d'arrivée
   const gens = [...s.participants]
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .sort((a, b) => (a.heure_arrivee || "").localeCompare(b.heure_arrivee || "")
+      || a.created_at.localeCompare(b.created_at))
     .map((p) => {
       const moi = Boolean(maPart && p.id === maPart.id);
-      return { nom: moi ? "Toi" : p.prenom, moi, statut: p.statut || "dispo" };
+      return { nom: moi ? "Toi" : p.prenom, moi, statut: p.statut || "dispo", arrivee: p.heure_arrivee };
     });
+  const monArrivee = gens.find((g) => g.moi)?.arrivee ?? null;
   const dispos = gens.filter((g) => g.statut === "dispo");
   const pasDispos = gens.filter((g) => g.statut === "pas_dispo");
   const maReponse = gens.find((g) => g.moi)?.statut ?? null; // "dispo", "pas_dispo" ou null
@@ -286,7 +295,10 @@ function carteSession(s) {
   const groupe = (titre, liste, classe, nomIcone) => liste.length > 0 && el("div", { class: "groupe-reponses" },
     el("span", { class: "titre-groupe" }, `${titre} (${liste.length})`),
     el("div", { class: "pastilles" },
-      liste.map((g) => el("span", { class: `pastille ${classe}${g.moi ? " moi" : ""}` }, icone(nomIcone), g.nom))),
+      liste.map((g) => el("span", { class: `pastille ${classe}${g.moi ? " moi" : ""}` },
+        icone(nomIcone), g.nom,
+        g.arrivee && el("span", { class: "pastille-arrivee" }, icone("horloge"), `dès ${formatHeure(g.arrivee)}`),
+      ))),
   );
 
   return el("article", { class: "carte" },
@@ -327,6 +339,7 @@ function carteSession(s) {
       groupe("Pas dispo", pasDispos, "pas-dispo", "croix"),
     ),
     boutons,
+    maReponse === "dispo" && zoneArrivee(s, monArrivee),
     creations[s.id] && el("div", { class: "actions-createur" },
       el("button", { type: "button", class: "bouton-lien bouton-modifier",
         onclick: () => ouvrirModification(s) },
@@ -336,6 +349,84 @@ function carteSession(s) {
         "Annuler la session"),
     ),
   );
+}
+
+/* ---------- « J'arrive plus tard » ---------- */
+
+// Sessions dont l'encart de saisie est ouvert (gardé entre deux rafraîchissements)
+const arriveesEnEdition = new Set();
+
+function zoneArrivee(s, monArrivee) {
+  const debut = s.heure.slice(0, 5);
+  const fin = s.heure_fin ? s.heure_fin.slice(0, 5) : null;
+
+  if (arriveesEnEdition.has(s.id)) {
+    const idChamp = `arrivee-${s.id}`;
+    const champ = el("input", {
+      id: idChamp, type: "time", class: "champ-arrivee", min: debut, max: fin,
+      value: monArrivee ? monArrivee.slice(0, 5) : "",
+    });
+    const message = el("p", { class: "aide" },
+      fin ? `Entre ${formatHeure(debut)} et ${formatHeure(fin)}.` : `Après ${formatHeure(debut)}.`);
+
+    const valider = async (e) => {
+      const v = champ.value;
+      if (!v || v <= debut || (fin && v >= fin)) {
+        message.textContent = fin
+          ? `Choisis une heure après ${formatHeure(debut)} et avant ${formatHeure(fin)}.`
+          : `Choisis une heure après ${formatHeure(debut)}.`;
+        message.className = "aide aide-erreur";
+        return champ.focus();
+      }
+      await pendant(e.currentTarget, () => enregistrerArrivee(s, v));
+    };
+
+    return el("div", { class: "zone-arrivee" },
+      el("label", { for: idChamp, class: "titre-zone-arrivee" }, "J'arrive à partir de"),
+      el("div", { class: "ligne-arrivee" },
+        champ,
+        el("button", { type: "button", class: "bouton-sombre bouton-ok", onclick: valider }, "OK"),
+      ),
+      message,
+      el("button", { type: "button", class: "bouton-discret", onclick: () => {
+        arriveesEnEdition.delete(s.id);
+        afficherSessions();
+      } }, "Annuler"),
+    );
+  }
+
+  const ouvrir = () => {
+    arriveesEnEdition.add(s.id);
+    afficherSessions();
+    document.getElementById(`arrivee-${s.id}`)?.focus();
+  };
+
+  if (monArrivee) {
+    return el("div", { class: "liens-arrivee" },
+      el("button", { type: "button", class: "lien-arrivee", onclick: ouvrir },
+        icone("horloge"), `J'arrive à ${formatHeure(monArrivee)} · modifier`),
+      el("button", { type: "button", class: "bouton-discret",
+        onclick: (e) => pendant(e.currentTarget, () => enregistrerArrivee(s, null)) },
+        "J'arrive à l'heure"),
+    );
+  }
+  return el("button", { type: "button", class: "lien-arrivee", onclick: ouvrir },
+    icone("horloge"), "J'arrive plus tard ?");
+}
+
+async function enregistrerArrivee(s, heure) {
+  const part = participations[s.id];
+  const { data, error } = await supabase.rpc("modifier_arrivee", {
+    p_id: part.id, p_jeton: part.jeton, p_heure: heure,
+  });
+  if (error || data === false) {
+    console.error(error);
+    toast("Impossible d'enregistrer ton heure d'arrivée.");
+    return;
+  }
+  arriveesEnEdition.delete(s.id);
+  toast(heure ? `C'est noté, tu arrives à ${formatHeure(heure)}.` : "C'est noté, tu arrives à l'heure.");
+  await chargerSessions();
 }
 
 // Clic sur « Je viens » ou « Pas dispo » :

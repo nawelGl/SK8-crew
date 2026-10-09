@@ -17,6 +17,19 @@
   --police-texte: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
+/* ===== Thème de la version dev : rose, pour ne jamais confondre avec la prod ===== */
+:root.dev {
+  --violet: #C2185B;
+  --violet-fonce: #8E1243;
+  --violet-doux: #FCE4EF;
+  --violet-pale: #FDF0F6;
+}
+
+:root.dev .marque::after {
+  content: " · DEV";
+  color: var(--violet);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -383,6 +396,101 @@ button {
 .compte {
   font-size: 13px;
   color: var(--gris);
+}
+
+.pastille-arrivee {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.pastille-arrivee svg {
+  width: 12px;
+  height: 12px;
+}
+
+.lien-arrivee {
+  align-self: flex-start;
+  min-height: 32px;
+  margin-top: -6px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--violet);
+}
+
+.liens-arrivee {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 16px;
+  margin-top: -6px;
+}
+
+.liens-arrivee .lien-arrivee {
+  margin-top: 0;
+}
+
+.zone-arrivee {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: -4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--violet-pale);
+  border: 1.5px solid var(--violet);
+}
+
+.zone-arrivee .bouton-discret {
+  align-self: flex-start;
+  min-height: 32px;
+}
+
+.titre-zone-arrivee {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ligne-arrivee {
+  display: flex;
+  gap: 8px;
+}
+
+.champ-arrivee {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--trait-champ);
+  background: var(--carte);
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.champ-arrivee:focus {
+  outline: 2px solid var(--violet);
+  outline-offset: 1px;
+}
+
+.bouton-ok {
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+.aide-erreur {
+  color: var(--rouge);
+  font-weight: 600;
 }
 
 .boutons-reponse {
